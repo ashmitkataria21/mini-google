@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mini Google</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--card:#f4f5f7;--bd:#d8dbe0;--acc:#1a56db;--bar:#1a56db}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171a;--fg:#eceef1;--mut:#9aa0a8;--card:#20242a;--bd:#343a42;--acc:#7aa7ff;--bar:#7aa7ff}}
+:root[data-theme="dark"]{--bg:#15171a;--fg:#eceef1;--mut:#9aa0a8;--card:#20242a;--bd:#343a42;--acc:#7aa7ff;--bar:#7aa7ff}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;padding:20px;max-width:960px;margin-inline:auto}
+h1{margin:0 0 4px;font-size:28px}
+.sub{color:var(--mut);margin:0 0 16px}
+form{display:flex;gap:8px;margin-bottom:20px}
+input{flex:1;padding:10px 12px;font-size:16px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg)}
+button{padding:10px 18px;font-size:16px;border:0;border-radius:8px;background:var(--acc);color:var(--bg);cursor:pointer}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:640px){.cols{grid-template-columns:1fr}}
+h2{font-size:17px;margin:0 0 4px}
+.note{color:var(--mut);font-size:13px;margin:0 0 10px}
+.r{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.u{color:var(--acc);font-weight:600}
+.t{font-size:14px;color:var(--mut)}
+.s{font-size:13px;margin-top:4px}
+.b{height:6px;background:var(--bar);border-radius:3px;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+td,th{padding:6px;border-bottom:1px solid var(--bd);text-align:left}
+.w{overflow-x:auto}
+</style>
+</head>
+<body>
+<h1>Mini Google</h1>
+<p class="sub">Old way (keyword counting) vs PageRank, side by side.</p>
+<form id="f"><input id="q" value="pizza" placeholder="Search…" aria-label="Search"><button>Search</button></form>
+<div class="cols">
+<section><h2>Old way: keyword count</h2><p class="note">Score = how many times the query words appear on the page.</p><div id="old"></div></section>
+<section><h2>PageRank way</h2><p class="note">Among pages containing the query, ranked by link importance.</p><div id="pr"></div></section>
+</div>
+<h2 style="margin-top:24px">PageRank of all pages</h2>
+<div class="w"><table id="tb"></table></div>
+<script>
+const DATA=[
+[1,"pune-food-guide.com","Where to eat in Pune - vada pav and biryani and pizza","2"],
+[2,"best-pizza-pune.com","Fresh wood-fired pizza made daily - try our cheese pizza","1;3"],
+[3,"college-canteen-blog.com","Student reviews of canteen food and chai and Friday pizza","2;4"],
+[4,"pizza-recipes-home.com","Make pizza at home - pizza dough and pizza sauce","2;5"],
+[5,"cheap-eats-pune.com","Good food under 100 rupees - misal and dosa and pizza slices","2"],
+[6,"pizza-pizza-pizza.com","pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza","1"]
+].map(([id,url,text,l])=>({id,url,text,links:l.split(";").map(Number)}));
+
+const words=s=>s.toLowerCase().match(/[a-z0-9]+/g)||[];
+
+function pagerank(pages,d=0.85,iters=50){
+  const N=pages.length;let pr={};pages.forEach(p=>pr[p.id]=1/N);
+  for(let i=0;i<iters;i++){
+    const nx={};pages.forEach(p=>nx[p.id]=(1-d)/N);
+    pages.forEach(p=>{p.links.forEach(t=>{nx[t]+=d*pr[p.id]/p.links.length})});
+    pr=nx;
+  }
+  return pr;
+}
+const PR=pagerank(DATA);
+
+function tf(p,terms){const w=words(p.text);return terms.reduce((s,t)=>s+w.filter(x=>x===t).length,0)}
+
+function card(p,score,label,max){
+  return `<div class="r"><div class="u">Page ${p.id}: ${p.url}</div><div class="t">${p.text}</div>
+  <div class="s">${label}: <b>${score}</b></div><div class="b" style="width:${max?Math.max(4,score/max*100):4}%"></div></div>`;
+}
+
+function search(){
+  const terms=words(document.getElementById("q").value);
+  const hits=DATA.map(p=>({p,tf:tf(p,terms)})).filter(h=>terms.length&&h.tf>0);
+  const old=[...hits].sort((a,b)=>b.tf-a.tf);
+  const pr=[...hits].sort((a,b)=>PR[b.p.id]-PR[a.p.id]);
+  const empty='<p class="note">No pages match.</p>';
+  const mo=Math.max(...old.map(h=>h.tf),0), mp=Math.max(...pr.map(h=>PR[h.p.id]),0);
+  document.getElementById("old").innerHTML=old.length?old.map(h=>card(h.p,h.tf,"matches",mo)).join(""):empty;
+  document.getElementById("pr").innerHTML=pr.length?pr.map(h=>card(h.p,PR[h.p.id].toFixed(3),"PageRank",mp)).join(""):empty;
+}
+
+const inl={};DATA.forEach(p=>inl[p.id]=0);DATA.forEach(p=>p.links.forEach(t=>inl[t]++));
+document.getElementById("tb").innerHTML="<tr><th>Page</th><th>Site</th><th>Inbound links</th><th>PageRank</th></tr>"+
+  [...DATA].sort((a,b)=>PR[b.id]-PR[a.id]).map(p=>`<tr><td>${p.id}</td><td>${p.url}</td><td>${inl[p.id]}</td><td>${PR[p.id].toFixed(3)}</td></tr>`).join("");
+
+document.getElementById("f").addEventListener("submit",e=>{e.preventDefault();search()});
+search();
+</script>
+</body>
+</html>
